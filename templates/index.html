@@ -3,112 +3,76 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Image Prediction</title>
+    <title>MNIST Digit Prediction</title>
     <style>
-        /* Simple styling for the form */
-        body { font-family: Arial, sans-serif; }
-        .container { width: 400px; margin: auto; }
-        .result { margin-top: 20px; }
-        canvas { border: 1px solid black; }
+        body {
+            font-family: Arial, sans-serif;
+        }
+        h1 {
+            color: #333;
+        }
+        .container {
+            width: 50%;
+            margin: auto;
+            text-align: center;
+        }
+        .result {
+            margin-top: 20px;
+            font-size: 24px;
+            font-weight: bold;
+            color: #4CAF50;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Upload or Capture Image for Prediction</h1>
-
-        <!-- Upload Image Section -->
-        <form id="upload-form" enctype="multipart/form-data">
-            <input type="file" id="file-input" name="file" accept="image/*" />
-            <button type="submit">Upload Image</button>
+        <h1>Upload an Image of a Digit</h1>
+        
+        <form id="imageForm" action="/predict" method="POST" enctype="multipart/form-data">
+            <input type="file" name="file" accept="image/*" required>
+            <button type="submit">Predict</button>
         </form>
 
-        <!-- Capture Image Section -->
-        <button id="capture-btn">Capture Image</button>
-        <canvas id="camera-canvas" width="280" height="280"></canvas>
-        <button id="capture-submit">Submit Captured Image</button>
+        <div id="predictionResult" class="result"></div>
 
-        <div class="result" id="result">
-            <h2>Prediction Result:</h2>
-            <p>Predicted Label: <span id="predicted-label"></span></p>
-            <p>Original Image:</p>
-            <img id="original-image" src="" alt="Original Image" />
-            <p>Grayscale Image:</p>
-            <img id="grayscale-image" src="" alt="Grayscale Image" />
-        </div>
+        <!-- Display uploaded image for preview -->
+        <div id="imagePreview"></div>
     </div>
 
     <script>
-        // JavaScript for capturing and submitting image
-        const captureBtn = document.getElementById('capture-btn');
-        const captureSubmitBtn = document.getElementById('capture-submit');
-        const cameraCanvas = document.getElementById('camera-canvas');
-        const ctx = cameraCanvas.getContext('2d');
-        const resultDiv = document.getElementById('result');
-        const predictedLabelSpan = document.getElementById('predicted-label');
-        const originalImage = document.getElementById('original-image');
-        const grayscaleImage = document.getElementById('grayscale-image');
+        const form = document.getElementById('imageForm');
+        const resultDiv = document.getElementById('predictionResult');
+        const imagePreview = document.getElementById('imagePreview');
 
-        // Get access to the camera
-        let videoStream;
+        form.addEventListener('submit', function(event) {
+            event.preventDefault();  // Prevent form from submitting the usual way
 
-        captureBtn.addEventListener('click', async () => {
-            videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
-            const videoElement = document.createElement('video');
-            videoElement.srcObject = videoStream;
-            videoElement.play();
-            
-            videoElement.onplay = () => {
-                setInterval(() => {
-                    ctx.drawImage(videoElement, 0, 0, cameraCanvas.width, cameraCanvas.height);
-                }, 100);
+            const formData = new FormData(form);
+
+            // Display the image preview
+            const file = formData.get('file');
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                imagePreview.innerHTML = `<img src="${e.target.result}" width="200" alt="Uploaded Image">`;
             };
-        });
+            reader.readAsDataURL(file);
 
-        captureSubmitBtn.addEventListener('click', async () => {
-            const dataUrl = cameraCanvas.toDataURL('image/png');
-
-            // Send captured image to the backend
-            await fetch('/predict', {
-                method: 'POST',
-                body: new URLSearchParams({
-                    image: dataUrl
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                // Update the result
-                predictedLabelSpan.textContent = data.predicted_label;
-                originalImage.src = 'data:image/png;base64,' + data.original_img;
-                grayscaleImage.src = 'data:image/png;base64,' + data.grayscale_img;
-                resultDiv.style.display = 'block';
-            })
-            .catch(error => {
-                console.error('Error:', error);
-            });
-        });
-
-        // Handle image upload form submission
-        document.getElementById('upload-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-
-            const formData = new FormData();
-            formData.append('file', document.getElementById('file-input').files[0]);
-
-            // Send uploaded image to backend
-            await fetch('/predict', {
+            // Send the form data via fetch API
+            fetch('/predict', {
                 method: 'POST',
                 body: formData
             })
             .then(response => response.json())
             .then(data => {
-                // Update the result
-                predictedLabelSpan.textContent = data.predicted_label;
-                originalImage.src = 'data:image/png;base64,' + data.original_img;
-                grayscaleImage.src = 'data:image/png;base64,' + data.grayscale_img;
-                resultDiv.style.display = 'block';
+                if (data.predicted_digit !== undefined) {
+                    resultDiv.innerHTML = `Predicted Digit: ${data.predicted_digit}`;
+                } else {
+                    resultDiv.innerHTML = 'Prediction failed. Please try again.';
+                }
             })
             .catch(error => {
                 console.error('Error:', error);
+                resultDiv.innerHTML = 'Error occurred during prediction.';
             });
         });
     </script>

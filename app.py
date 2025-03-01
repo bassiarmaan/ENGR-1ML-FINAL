@@ -1,93 +1,48 @@
+from flask import Flask, request, jsonify, render_template
 import torch
-import torchvision.transforms as transforms
-from PIL import Image, UnidentifiedImageError
-from flask import Flask, render_template, request, jsonify
-import io
-import base64
-import binascii
-from cnn import CNN
-
-# Load the trained model
-file_path = 'mnist_cnn.pth'
-model = CNN()
-model.load_state_dict(torch.load(file_path))
-model.eval()
-
-# Define the transformation for the image
-transform = transforms.Compose([
-    transforms.Resize((28, 28)),  # Resize to match MNIST dimensions
-    transforms.Grayscale(num_output_channels=1),  # Ensure it's grayscale
-    transforms.ToTensor(),  # Convert to tensor
-    transforms.Normalize((0.5,), (0.5,))  # Normalize (for MNIST)
-])
-
-# Function to convert PIL image to base64
-def pil_to_base64(img):
-    buffered = io.BytesIO()
-    img.save(buffered, format="PNG")
-    img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
-    return img_str
+from cnn import CNN  # Assuming your model is in CNN_model.py
+from app_util import transform_image, predict_digit  # Assuming this function is in transform_image.py
 
 # Initialize the Flask app
 app = Flask(__name__)
 
-# Home route
+# Load the trained MNIST model
+model = CNN()
+model.load_state_dict(torch.load("mnist_cnn.pth"))  # Load model weights
+model.eval()  # Set model to evaluation mode
+
 @app.route('/')
-def home():
+def index():
+    """Render the homepage with an image upload form."""
     return render_template('index.html')
 
-# Route to handle image processing
 @app.route('/predict', methods=['POST'])
 def predict():
+    """Handle the image upload and prediction."""
+    # Check if the image file is part of the request
+    if 'file' not in request.files:
+        return jsonify({"error": "No file part"}), 400
+    
+    file = request.files['file']
+    
+    if file.filename == '':
+        return jsonify({"error": "No selected file"}), 400
+
     try:
-        # Check if the image was uploaded via file or captured from camera
-        if 'image' in request.form:
-            # Image from form upload (Base64)
-            img_data = request.form['image']
-            # Process the base64 data
-            img_data = img_data.split(',')[1]  # Remove the "data:image/png;base64," part
+        # Save the uploaded image temporarily
+        file_path = "temp_image.png"
+        file.save(file_path)
 
-            # Ensure proper padding for the base64 string
-            padding = len(img_data) % 4
-            if padding != 0:
-                img_data += '=' * (4 - padding)  # Add the necessary padding
+        # Transform the image and predict the digit
+        transformed_image = transform_image(file_path)  # Shape: (28, 28)
+        predicted_digit = predict_digit(model, transformed_image)
 
-            img_bytes = io.BytesIO(base64.b64decode(img_data))
-            img = Image.open(img_bytes)
+        # Return the prediction as a JSON response
+        return jsonify({"predicted_digit": predicted_digit})
 
-        elif 'file' in request.files:
-            # Image uploaded via file input
-            img = Image.open(request.files['file'])
-        
-        else:
-            return jsonify({'error': 'No image data provided'}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-    except (UnidentifiedImageError, OSError, binascii.Error) as e:
-        return jsonify({'error': f'Invalid image data: {str(e)}'}), 400
-
-    # Save the original image as base64
-    original_img_base64 = pil_to_base64(img)
-
-    # Apply the transformations to the image (convert to grayscale)
-    grayscale_img = transforms.Grayscale(num_output_channels=1)(img)  # Convert to grayscale
-    grayscale_img = transform(grayscale_img).unsqueeze(0)  # Add batch dimension
-
-    # Convert the grayscale image to base64
-    grayscale_img_pil = transforms.ToPILImage()(grayscale_img.squeeze(0))  # Convert tensor to PIL image
-    grayscale_img_base64 = pil_to_base64(grayscale_img_pil)
-
-    # Make a prediction
-    with torch.no_grad():
-        output = model(grayscale_img)
-        _, predicted = torch.max(output.data, 1)
-        predicted_label = predicted.item()
-
-    # Return the prediction along with the base64 images
-    return jsonify({
-        'predicted_label': predicted_label,
-        'original_img': original_img_base64,
-        'grayscale_img': grayscale_img_base64
-    })
 
 if __name__ == '__main__':
     app.run(debug=True)
