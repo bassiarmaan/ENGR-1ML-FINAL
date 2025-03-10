@@ -3,78 +3,70 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MNIST Digit Prediction</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-        }
-        h1 {
-            color: #333;
-        }
-        .container {
-            width: 50%;
-            margin: auto;
-            text-align: center;
-        }
-        .result {
-            margin-top: 20px;
-            font-size: 24px;
-            font-weight: bold;
-            color: #4CAF50;
-        }
-    </style>
+    <title>MNIST Digit Predictor</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
 <body>
-    <div class="container">
-        <h1>Upload an Image of a Digit</h1>
-        
-        <form id="imageForm" action="/predict" method="POST" enctype="multipart/form-data">
-            <input type="file" name="file" accept="image/*" required>
-            <button type="submit">Predict</button>
-        </form>
 
-        <div id="predictionResult" class="result"></div>
+    <h1>MNIST Digit Predictor</h1>
+    
+    <form id="upload-form" enctype="multipart/form-data">
+        <input type="file" id="file" name="file" accept="image/*">
+        <button type="submit">Predict</button>
+    </form>
+    
+    <button id="mnist-button">Choose from MNIST</button>
 
-        <!-- Display uploaded image for preview -->
-        <div id="imagePreview"></div>
-    </div>
+    <h2>Prediction: <span id="result">N/A</span></h2>
+
+    <h3>Uploaded Image (Pre-Processed):</h3>
+    <img id="uploaded-image" src="" alt="Uploaded Image" style="display:none; width: 150px; height: 150px; border: 1px solid black;">
+
+    <h3>Processed Image (Model Input):</h3>
+    <img id="processed-image" src="" alt="Processed Image" style="display:none; width: 150px; height: 150px; border: 1px solid black;">
 
     <script>
-        const form = document.getElementById('imageForm');
-        const resultDiv = document.getElementById('predictionResult');
-        const imagePreview = document.getElementById('imagePreview');
+        $(document).ready(function () {
+            $("#upload-form").submit(function (event) {
+                event.preventDefault();
+                
+                var formData = new FormData();
+                formData.append("file", $("#file")[0].files[0]);
 
-        form.addEventListener('submit', function(event) {
-            event.preventDefault();  // Prevent form from submitting the usual way
+                $.ajax({
+                    url: "/predict",
+                    type: "POST",
+                    data: formData,
+                    processData: false,
+                    contentType: false,
+                    success: function (response) {
+                        $("#result").text(response.predicted_digit);
+                        
+                        if (response.uploaded_image_url) {
+                            $("#uploaded-image").attr("src", response.uploaded_image_url + "?t=" + new Date().getTime()).show();
+                        }
+                        if (response.processed_image_url) {
+                            $("#processed-image").attr("src", response.processed_image_url + "?t=" + new Date().getTime()).show();
+                        }
+                    },
+                    error: function () {
+                        $("#result").text("Error");
+                    }
+                });
+            });
 
-            const formData = new FormData(form);
-
-            // Display the image preview
-            const file = formData.get('file');
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                imagePreview.innerHTML = `<img src="${e.target.result}" width="200" alt="Uploaded Image">`;
-            };
-            reader.readAsDataURL(file);
-
-            // Send the form data via fetch API
-            fetch('/predict', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.predicted_digit !== undefined) {
-                    resultDiv.innerHTML = `Predicted Digit: ${data.predicted_digit}`;
-                } else {
-                    resultDiv.innerHTML = 'Prediction failed. Please try again.';
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                resultDiv.innerHTML = 'Error occurred during prediction.';
+            $("#mnist-button").click(function () {
+                $.post("/predict_random", function (response) {
+                    $("#result").text(response.predicted_digit);
+                    if (response.processed_image_url) {
+                        $("#processed-image").attr("src", response.processed_image_url + "?t=" + new Date().getTime()).show();
+                    }
+                }).fail(function () {
+                    $("#result").text("Error");
+                });
             });
         });
     </script>
+
 </body>
 </html>

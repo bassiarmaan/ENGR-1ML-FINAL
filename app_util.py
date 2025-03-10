@@ -10,14 +10,17 @@ def transform_image(image_path, display=False):
     # Convert the image to grayscale
     img_gray = img.convert('L')
     
-    # Resize the image to 32x32 pixels
+    # Resize the image to 28x28 pixels
     img_resized = img_gray.resize((28, 28))
     
     # Convert the image to a numpy array and normalize pixel values to [0, 1]
     img_array = np.array(img_resized) / 255.0
+    
+    # Invert colors
+    img_array = 1 - img_array
 
     if display:
-        # Display the image using matplotlib
+        # Display the inverted image using matplotlib
         plt.imshow(img_array, cmap='gray')
         plt.axis('off')  # Turn off axis labels
         plt.show()
@@ -43,5 +46,3 @@ def predict_digit(model, image_array):
     predicted_digit = torch.argmax(output, dim=1).item()
 
     return predicted_digit
-
-
